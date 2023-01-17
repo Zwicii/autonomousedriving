@@ -4,6 +4,11 @@ from numpy import cos, sin, tan, arctan2, pi, arcsin
 import scipy.integrate as sci
 import matplotlib.pyplot as plt
 from matplotlib import animation
+from scipy.integrate import odeint
+from vehiclemodels.init_ks import init_ks
+from vehiclemodels.init_std import init_std
+
+from test_vehicle import sy0, vel0, dotPsi0, beta0, Psi0, delta0, func_STD
 
 
 # from IPython.display import HTML         # for jupyter notebook
@@ -23,7 +28,9 @@ para.k = 10  # [1/s] tuning for cross tracking error 1...20 seems reasonable, DA
 para.ksoft = 1.0  # [m/s] to avoid problems as low speeds close or equal to zero
 para.dt = 1.0 / 25.0  # controller step size [s]
 para.maxDelta = 25 * pi / 180  # [rad]
-
+para.l_R = 0.5 * para.l
+para.t_LA  = 6
+para.EG    = 4
 # Simulation parameter
 sim_para = Parameters()  # instance of class Parameters
 sim_para.t0 = 0  # start time
@@ -31,7 +38,7 @@ sim_para.tf = 3  # final time
 sim_para.dt = para.dt  # step-size
 
 
-def ode(x, t, p):
+def ode2(x, t, p):
     """Function of the robots kinematics
     Args:
         x: state  X, Y, Theta
@@ -51,7 +58,50 @@ def ode(x, t, p):
     return dxdt  # return state derivative
 
 
-def controlStanley(e, xc, p, t):
+def controlStanleyCopy(e, xc, p, t):
+    """Function of the control law
+    Args:
+        e: error vector
+        xc: state vector of controller (discrete states from last iteration)
+        t: time
+    Returns:
+        u: control vector
+        xc: updated state vector controller
+    """
+    g = 9.81  # [m/s^2]
+
+    e_fa, theta_e = e  # decompose error
+
+    vx = p.vx
+    u1 = vx  # set control vx
+    #p.a = 0
+    #p.b = 0
+    #p = parameters_vehicle2()
+    v_delta = 0.0
+    acc = 0.63 * g
+    u = [v_delta, acc]
+
+    # simple stanley control
+    steering_angle = theta_e + arctan2(p.k * e_fa, vx + p.ksoft)
+    #initialState = [0, sy0, delta0, vel0, Psi0, dotPsi0, beta0]  # initial state for simulation
+    #x0_STD = init_std(initialState, p)  # initial state for single-track drift model
+    #x0_KS = init_ks(initialState)
+    #steering_angle = x0_KS[2]
+    #steering_angle = odeint(func_STD, x0_STD, t, args=(u1,p))
+    #f = vehicle_dynamics_ks(vx, x0_KS, p)
+
+    # normalize and limit
+    steering_angle = arcsin(sin(steering_angle))
+    steering_angle = np.minimum(np.maximum(steering_angle, -p.maxDelta), p.maxDelta)
+
+    # turn rate
+    turn_rate = vx / p.l * tan( steering_angle )
+    u1 = turn_rate
+
+    return np.array([u1, steering_angle]).T, xc
+
+
+def controlStanley2(e, xc, p, t):
     """Function of the control law
     Args:
         e: error vector
@@ -77,6 +127,40 @@ def controlStanley(e, xc, p, t):
     # turn_rate = vx / p.l * tan( steering_angle )
 
     return np.array([u1, steering_angle]).T, xc
+
+
+def controlStanleySimple(e, xc, r, p, t):
+    """Function of the control law
+    Args:
+        e:  control error (controller specific)
+        xc: state vector controller from last step (only applies for controller with internal states)
+        t:  time (to enable time dependent control laws like fade in/out etc.)
+    Returns:
+        u:  control vector
+        xc: updated state vector controller (save internal state for next call)
+    """
+    y_e, theta_e = e  # extract two parts of the control error
+
+    vx = p.vx  # get the vehicle velocity (const parameter)
+    u1 = vx
+
+    ## feed back
+    b = para.l_R
+    x_LA = vx * p.t_LA  # FORMULA 10 from Paper
+    d_LA = b + x_LA  # FORMULA 10 from Paper
+    delta_FB = 2 * (para.l + para.EG * vx * vx) / (d_LA * d_LA) * (y_e + p.t_LA * theta_e)
+
+    ## feed forward
+    i = np.maximum(2, np.int(t / p.dt + 0.1))  # max is to have first and second same and index not below 0
+    # calculate kappa by simple differences  --> is always 0 for straight...
+    kappa_ref = (r[i, 2] - r[i - 1, 2]) / np.linalg.norm(r[i, 0:1] - r[i - 1, 0:1])
+    # apply to ff --> is 0 for straight line...
+    delta_FF = (para.l + para.EG * vx * vx) * kappa_ref
+
+    u2 = delta_FB + delta_FF
+    u2 = np.minimum(np.maximum(u2, -p.maxDelta), p.maxDelta)  # saturation of steering angle
+
+    return np.array([u1, u2]).T, xc
 
 
 def plot_data(x, u, r, t, fig_width, fig_height, save=False):
@@ -152,7 +236,7 @@ def plot_data(x, u, r, t, fig_width, fig_height, save=False):
     return None
 
 
-def car_animation(x, u, r, t, p):
+def car_animation2(x, u, r, t, p):
     """Animation function of the car-like mobile robot
 
     Args:
@@ -283,7 +367,7 @@ def car_animation(x, u, r, t, p):
     return ani
 
 
-def referenceTrajectory(p, sp):
+def referenceTrajectory2(p, sp):
     # generation of the reference trajectory
 
     n = np.int((sp.tf - sp.t0) / sp.dt)  # number of samples (here each interval one sample to enable simplified error)
@@ -305,13 +389,13 @@ def referenceTrajectory(p, sp):
     return referenceTraj
 
 
-def controlErrorEGOFront(ego_state, r, t, p):
+def controlErrorEGOFront2(ego_state, r, t, p):
     # calaculate the error with respect to the front
 
     x, y, theta = ego_state  # extract state vector from ego_state
     ego_pos = np.array([(x + p.l * cos(theta)), (y + p.l * sin(theta))])  # ego position vector
 
-    target_pos, target_psi = getTargetPoint(ego_pos, r_traj)  # extract target position and orientation
+    target_pos, target_psi = getTargetPoint2(ego_pos, r_traj)  # extract target position and orientation
 
     # POSITION ERROR
     error_vect = ego_pos - target_pos  # vector VA from target to ego
@@ -327,7 +411,19 @@ def controlErrorEGOFront(ego_state, r, t, p):
     return np.array([e_fa, theta_e]).T
 
 
-def getTargetPoint(x, r):
+def controlErrorEGOFrontSimple(x, r, t, p):
+    x, y, theta = x  # state vector
+
+    i = np.int(t/p.dt+0.1)
+
+    e_fa = r[i,1] - y  # rear wheel position is the reference in this example
+                       # negative if vehicle is left of traj
+    theta_e = r[i,2] - theta  # orientation error (reference orientation const.0)
+
+    return np.array([e_fa, theta_e]).T
+
+
+def getTargetPoint2(x, r):
     # calculate a target point on a polygon r (either a vertex or on a line),
     # that is closest to x
 
@@ -385,8 +481,8 @@ def getTargetPoint(x, r):
 
 
 # initial state ##################################################################
-x0 = [0, 0, pi / 10]
-para.vx = 70 / 3.6  # vehicle speed
+x0 = [0, 0, 0]
+para.vx = 30 / 3.6  # vehicle speed
 
 # simulation #####################################################################
 tt = np.arange(sim_para.t0, sim_para.tf + sim_para.dt, sim_para.dt)  # time vector
@@ -398,18 +494,18 @@ xc = [0, 0]  # controller states
 e_traj = np.zeros([len(tt), 2])  # init state trace
 
 # reference
-r_traj = referenceTrajectory(para, sim_para)
+r_traj = referenceTrajectory2(para, sim_para)
 
 for t_i in np.arange(len(tt) - 1):  # loop over time instances
 
     # error model
-    e_traj[t_i] = controlErrorEGOFront(x_traj[t_i], r_traj, tt[t_i], para)
+    e_traj[t_i] = controlErrorEGOFront2(x_traj[t_i], r_traj, tt[t_i], para)
     # control law
-    u, xc = controlStanley(e_traj[t_i], xc, para, tt[t_i])  # get control
+    u, xc = controlStanley2(e_traj[t_i], xc, para, tt[t_i])  # get control
     u_traj[t_i] = u
     # vehicle motion
     para.u = u  # to pass control into ode simulation step
-    sol = sci.solve_ivp(lambda t, x: ode(x, t, para),
+    sol = sci.solve_ivp(lambda t, x: ode2(x, t, para),
                         (tt[t_i], tt[t_i + 1]), x_traj[t_i, :],
                         method='RK45', t_eval=tt[t_i + 1:t_i + 2])
     x_traj[t_i + 1, :] = sol.y.T  # size = len(x) x len(tt) (.T -> transpose)
@@ -419,6 +515,6 @@ plot_data(x_traj, u_traj, r_traj, tt, 12, 16, save=True)
 # plt.show() #for jupyter notepad
 
 # animation ######################################################################
-ani = car_animation(x_traj, u_traj, r_traj, tt, para)
+ani = car_animation2(x_traj, u_traj, r_traj, tt, para)
 # HTML(ani.to_html5_video())  #for jupyter notepad
 plt.show()

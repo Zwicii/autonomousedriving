@@ -53,6 +53,7 @@ Psi0 = 0
 dotPsi0 = 0
 beta0 = 0
 sy0 = 0
+
 initialState = [0, sy0, delta0, vel0, Psi0, dotPsi0, beta0]  # initial state for simulation
 x0_KS = init_ks(initialState)  # initial state for kinematic single-track model
 x0_ST = init_st(initialState)  # initial state for single-track model
