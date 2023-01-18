@@ -4,6 +4,8 @@ from numpy import cos, sin, tan
 
 import matplotlib.pyplot as plt
 import matplotlib.animation
+from vehiclemodels.vehicle_dynamics_mb import vehicle_dynamics_mb
+
 #plt.rcParams['animation.ffmpeg_path'] = 'ffmpeg'
 plt.rcParams["animation.html"] = "jshtml"
 
@@ -25,6 +27,28 @@ def ode(x, t, p):
                      1 / p.l * u1 * tan(u2)])
 
     return dxdt  # return state derivative
+
+
+def ode2(x, t, p):
+    """Function of the robots kinematics
+    Args:
+        x: state  X, Y, Theta
+        t: time
+        p(object): parameter container class
+    Returns:
+        dxdt: state derivative
+    """
+    #x1, x2, x3 = x  # state vector
+    #vel = p.vel  # control(x, t)  # control vector
+    #steering_angle = p.steering
+    # dxdt = f(x, u):
+    #dxdt = np.array([u1 * cos(x3),
+    #                 u1 * sin(x3),
+    #                 1 / p.l * u1 * tan(u2)])
+    x[2] = p.steering_angle
+    x[3] = p.vel
+    return vehicle_dynamics_mb(x, [p.turn_rate, 0], p.p)  # return state derivative
+
 
 def plot_data(x, u, r, t, fig_width, fig_height, ofileName, save=False):
     """Plotting function of simulated state and actions
