@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
+from enum import Enum
+
 import numpy as np
 from numpy import cos, sin, tan
 
 import matplotlib.pyplot as plt
 import matplotlib.animation
+from pycparser.c_ast import Switch
+from vehiclemodels.vehicle_dynamics_ks import vehicle_dynamics_ks
 from vehiclemodels.vehicle_dynamics_mb import vehicle_dynamics_mb
+from vehiclemodels.vehicle_dynamics_st import vehicle_dynamics_st
+from vehiclemodels.vehicle_dynamics_std import vehicle_dynamics_std
 
 #plt.rcParams['animation.ffmpeg_path'] = 'ffmpeg'
 plt.rcParams["animation.html"] = "jshtml"
@@ -29,7 +35,14 @@ def ode(x, t, p):
     return dxdt  # return state derivative
 
 
-def ode2(x, t, p):
+class Model(Enum):
+    KS = 1
+    ST = 2
+    STD = 3
+    MB = 4
+
+
+def odeCustom(x, t, p, model):
     """Function of the robots kinematics
     Args:
         x: state  X, Y, Theta
@@ -47,7 +60,27 @@ def ode2(x, t, p):
     #                 1 / p.l * u1 * tan(u2)])
     x[2] = p.steering_angle
     x[3] = p.vel
-    return vehicle_dynamics_mb(x, [p.turn_rate, 0], p.p)  # return state derivative
+
+    # x: kinmatic parameters
+    # x[2] = steering angle
+    # x[3] = velocity
+    # uInit[0] = steering velocity
+    # uInit[1] = acceleration
+
+    # vehicle_dynamics_mb(x, uInit, p):
+
+
+    if model == Model.KS :
+        return vehicle_dynamics_ks(x, [p.turn_rate, 0], p.p)  # return state derivative
+    elif model == Model.MB :
+        return vehicle_dynamics_mb(x, [p.turn_rate, 0], p.p)  # return state derivative
+    elif model == Model.STD:
+        return vehicle_dynamics_std(x, [p.turn_rate, 0], p.p)  # return state derivative
+    elif model == Model.ST:
+        return vehicle_dynamics_st(x, [p.turn_rate, 0], p.p)  # return state derivative
+
+    else:
+        return vehicle_dynamics_mb(x, [p.turn_rate, 0], p.p)  # return state derivative
 
 
 def plot_data(x, u, r, t, fig_width, fig_height, ofileName, save=False):
