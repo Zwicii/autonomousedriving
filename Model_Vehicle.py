@@ -6,7 +6,6 @@ from numpy import cos, sin, tan
 
 import matplotlib.pyplot as plt
 import matplotlib.animation
-from pycparser.c_ast import Switch
 from vehiclemodels.vehicle_dynamics_ks import vehicle_dynamics_ks
 from vehiclemodels.vehicle_dynamics_mb import vehicle_dynamics_mb
 from vehiclemodels.vehicle_dynamics_st import vehicle_dynamics_st
@@ -70,17 +69,19 @@ def odeCustom(x, t, p, model):
     # vehicle_dynamics_mb(x, uInit, p):
 
 
-    if model == Model.KS :
-        return vehicle_dynamics_ks(x, [p.turn_rate, 0], p.p)  # return state derivative
-    elif model == Model.MB :
-        return vehicle_dynamics_mb(x, [p.turn_rate, 0], p.p)  # return state derivative
-    elif model == Model.STD:
-        return vehicle_dynamics_std(x, [p.turn_rate, 0], p.p)  # return state derivative
-    elif model == Model.ST:
-        return vehicle_dynamics_st(x, [p.turn_rate, 0], p.p)  # return state derivative
+    ACC = -5;
 
+
+    if model == Model.KS :
+        return vehicle_dynamics_ks(x, [p.turn_rate, ACC], p.p)  # return state derivative
+    elif model == Model.MB :
+        return vehicle_dynamics_mb(x, [p.turn_rate, ACC], p.p)  # return state derivative
+    elif model == Model.STD:
+        return vehicle_dynamics_std(x, [p.turn_rate, ACC], p.p)  # return state derivative
+    elif model == Model.ST:
+        return vehicle_dynamics_st(x, [p.turn_rate, ACC], p.p)  # return state derivative
     else:
-        return vehicle_dynamics_mb(x, [p.turn_rate, 0], p.p)  # return state derivative
+        None # return state derivative
 
 
 def plot_data(x, u, r, t, fig_width, fig_height, ofileName, save=False):
